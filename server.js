@@ -33,7 +33,7 @@ app.post("/send-email", async (req, res) => {
     // --- 1️⃣ Send to NGO inbox ---
     await resend.emails.send({
       from: "Twelve In Twelve <onboarding@resend.dev>",
-      to: "info@twelveintwelvelbg.org",
+      to: "edwardmintah17@gmail.com",
       subject: `New Contact: ${subject}`,
       html: `
         <h2>New Contact Form Submission</h2>
