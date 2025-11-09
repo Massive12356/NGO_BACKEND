@@ -1,23 +1,40 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
 const app = express();
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-// ✅ Middlewares
 app.use(cors());
-app.use(express.json()); // parse JSON body
+app.use(express.json());
 
-// ✅ Health check route
+// 🚀 Health check
 app.get("/", (req, res) => {
-  res.send("🚀 Twelve In Twelve Backend is Running");
+  res.send("🚀 Twelve In Twelve Backend is Running with Gmail SMTP");
 });
 
-// ✅ Contact Form Endpoint
+// Create transporter (Gmail SMTP)
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465, // secure SSL port
+  secure: true,
+  auth: {
+    user: process.env.GMAIL_USER, // e.g., info@twelveintwelvelbg.org
+    pass: process.env.GMAIL_APP_PASSWORD, // App password from Google
+  },
+});
+
+// ✅ Verify transporter connection once
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("❌ SMTP Connection Error:", error);
+  } else {
+    console.log("✅ SMTP Server Ready to Send Emails");
+  }
+});
+
+// Contact form endpoint
 app.post("/send-email", async (req, res) => {
   try {
     const { firstName, lastName, email, organization, subject, message } =
@@ -30,10 +47,14 @@ app.post("/send-email", async (req, res) => {
       });
     }
 
-    // --- 1️⃣ Send to NGO inbox ---
-    await resend.emails.send({
-      from: "Twelve In Twelve <onboarding@resend.dev>",
-      to: "edwardmintah17@gmail.com",
+    console.log("📩 Received payload:", req.body);
+
+    // 🔸 Gmail-safe "from" (you must send from your verified Gmail account)
+    //    Use replyTo so that you can reply directly to the sender.
+    const info = await transporter.sendMail({
+      from: `"Twelve In Twelve" <${process.env.GMAIL_USER}>`,
+      replyTo: email,
+      to: process.env.GMAIL_USER, // your organization inbox
       subject: `New Contact: ${subject}`,
       html: `
         <h2>New Contact Form Submission</h2>
@@ -52,14 +73,16 @@ app.post("/send-email", async (req, res) => {
       `,
     });
 
-    // --- 2️⃣ Auto-reply to sender ---
-    await resend.emails.send({
-      from: "Twelve In Twelve <onboarding@resend.dev>",
+    console.log("✅ Mail sent:", info.messageId, info.response);
+
+    // Auto-reply to sender
+    const autoReply = await transporter.sendMail({
+      from: `"Twelve In Twelve" <${process.env.GMAIL_USER}>`,
       to: email,
       subject: "Thank you for contacting Twelve In Twelve",
       html: `
         <p>Dear ${firstName},</p>
-        <p>Thank you for reaching out to Twelve In Twelve. We’ve received your message about <strong>${subject}</strong>.</p>
+        <p>Thank you for reaching out to <strong>Twelve In Twelve</strong>. We’ve received your message about <strong>${subject}</strong>.</p>
         <p>Our team will review your request and get back to you soon.</p>
         <br/>
         <p>Warm regards,</p>
@@ -67,21 +90,21 @@ app.post("/send-email", async (req, res) => {
       `,
     });
 
+    console.log("📨 Auto-reply sent:", autoReply.messageId, autoReply.response);
+
     res.status(200).json({
       success: true,
       message: "Email sent successfully ✅",
     });
   } catch (error) {
-    console.error("Resend email error:", error);
+    console.error("❌ Email send error:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to send email. Please try again later.",
+      error: error.message,
     });
   }
 });
 
-// ✅ Port config (for local dev)
+// ✅ Port
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
